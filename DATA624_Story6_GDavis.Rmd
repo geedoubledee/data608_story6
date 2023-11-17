@@ -11,10 +11,22 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r packages, warning = FALSE, message = FALSE}
 library(tidyverse)
+library(snakecase)
+library(RColorBrewer)
+library(ggpubr)
+library(nnet)
+library(fpp3)
 
 ```
 
-```{r data}
+```{r theme}
+cur_theme <- theme_set(theme_classic())
+palette <- brewer.pal(n = 12, name = "Paired")
+greys <- brewer.pal(n = 9, name = "Greys")
+
+```
+
+```{r food_security_data}
 food_sec_var_names <- c("Summary Food Security Status",
                         "Detailed Food Security Status",
                         "Food Security Raw Score",
@@ -60,5 +72,301 @@ for (i in 1:length(fnames)){
 }
 food_insecurity_df <- food_insecurity_df |>
     bind_rows(df_list)
+
+```
+
+```{r food_security_mutations}
+food_insecurity_df <- food_insecurity_df |>
+    mutate(HEFAMINC = case_when(HEFAMINC < 0 ~ NA,
+                                HEFAMINC < 2 ~ 0,
+                                HEFAMINC < 3 ~ 5000,
+                                HEFAMINC < 4 ~ 7500,
+                                HEFAMINC < 5 ~ 10000,
+                                HEFAMINC < 6 ~ 12500,
+                                HEFAMINC < 7 ~ 15000,
+                                HEFAMINC < 8 ~ 20000,
+                                HEFAMINC < 9 ~ 25000,
+                                HEFAMINC < 10 ~ 30000,
+                                HEFAMINC < 11 ~ 35000,
+                                HEFAMINC < 12 ~ 40000,
+                                HEFAMINC < 13 ~ 50000,
+                                HEFAMINC < 14 ~ 60000,
+                                HEFAMINC < 15 ~ 75000,
+                                HEFAMINC < 16 ~ 100000,
+                                TRUE ~ 150000),
+           HRPOOR = factor(case_when(HRPOOR < 2 ~ "Below",
+                                     TRUE ~ "Above")),
+           HRFS12MD = factor(case_when(HRFS12MD < 0 ~ NA,
+                                       HRFS12MD < 3 ~ "High or Marginal",
+                                       HRFS12MD < 4 ~ "Low",
+                                       TRUE ~ "Very Low"),
+                             levels = c("High or Marginal", "Low", "Very Low"),
+                             exclude = NULL),
+           HRFS12MC = factor(case_when(HRFS12MC < 0 ~ NA,
+                                       HRFS12MC < 2 ~ "High or Marginal",
+                                       HRFS12MC < 3 ~ "Low",
+                                       TRUE ~ "Very Low"),
+                             levels = c("High or Marginal", "Low", "Very Low"),
+                             exclude = NULL),
+           HRFS12M8 = factor(case_when(HRFS12M8 < 0 ~ NA,
+                                       HRFS12M8 < 3 ~ "High or Marginal",
+                                       HRFS12M8 < 4 ~ "Low",
+                                       TRUE ~ "Very Low"),
+                             levels = c("High or Marginal", "Low", "Very Low"),
+                             exclude = NULL),
+           HRFS30D2 = factor(case_when(HRFS30D2 < 0 ~ NA,
+                                       HRFS30D2 < 3 ~ "High or Marginal",
+                                       HRFS30D2 < 4 ~ "Low",
+                                       TRUE ~ "Very Low"),
+                             levels = c("High or Marginal", "Low", "Very Low"),
+                             exclude = NULL),
+           HRFS30D5 = factor(case_when(HRFS30D5 < 0 ~ NA,
+                                       HRFS30D5 < 2 ~ "High or Marginal",
+                                       HRFS30D5 < 3 ~ "Low",
+                                       TRUE ~ "Very Low"),
+                             levels = c("High or Marginal", "Low", "Very Low"),
+                             exclude = NULL),
+           HRFS30D8 = factor(case_when(HRFS30D8 < 0 ~ NA,
+                                       HRFS30D8 < 3 ~ "High or Marginal",
+                                       HRFS30D8 < 4 ~ "Low",
+                                       TRUE ~ "Very Low"),
+                             levels = c("High or Marginal", "Low", "Very Low"),
+                             exclude = NULL),
+           PESEX = factor(case_when(PESEX < 0 ~ NA,
+                                    PESEX < 2 ~ "Male",
+                                    TRUE ~ "Female"),
+                          levels = c("Male", "Female"),
+                          exclude = NULL),
+           HETENURE = factor(case_when(HETENURE < 0 ~ NA,
+                                       HETENURE < 2 ~ "Owned",
+                                       HETENURE < 3 ~ "Rented",
+                                       TRUE ~ "Occupied"),
+                             levels = c("Owned", "Rented", "Occupied"),
+                             exclude = NULL),
+           HEHOUSUT = factor(case_when(HEHOUSUT < 0 ~ NA,
+                                       HEHOUSUT < 2 ~ "House/Apt",
+                                       HEHOUSUT < 4 ~ "Hotel/Motel",
+                                       HEHOUSUT < 5 ~ "Rooming/Boarding House",
+                                       HEHOUSUT < 7 ~ "Mobile Home",
+                                       HEHOUSUT < 8 ~ NA,
+                                       HEHOUSUT < 9 ~ "Rooming/Boarding House",
+                                       HEHOUSUT < 10 ~ "Hotel/Motel",
+                                       HEHOUSUT < 11 ~ "Tent/Trailer Site",
+                                       HEHOUSUT < 12 ~ "Student Dorm",
+                                       TRUE ~ NA),
+                             levels = c("House/Apt", "Hotel/Motel",
+                                        "Rooming/Boarding House",
+                                        "Mobile Home", "Tent/Trailer Site",
+                                        "Student Dorm"),
+                             exclude = NULL),
+           PEEDUCA = factor(case_when(PEEDUCA < 0 ~ NA,
+                                      PEEDUCA < 34 ~ "Elementary",
+                                      PEEDUCA < 35 ~ "Junior High",
+                                      PEEDUCA < 39 ~ "High School",
+                                      PEEDUCA < 40 ~ "High School Diploma",
+                                      PEEDUCA < 41 ~ "College",
+                                      PEEDUCA < 43 ~ "Associate's Degree",
+                                      PEEDUCA < 44 ~ "Bachelor's Degree",
+                                      PEEDUCA < 45 ~ "Master's Degree",
+                                      PEEDUCA < 46 ~ "Professional Degree",
+                                      TRUE ~ "Doctorate Degree"),
+                            levels = c("Elementary", "Junior High", "High School",
+                                       "High School Diploma", "College",
+                                       "Associate's Degree", "Bachelor's Degree",
+                                       "Master's Degree", "Professional Degree",
+                                       "Doctorate Degree"),
+                            exclude = NULL),
+           PTDTRACE = factor(case_when(PTDTRACE < 0 ~ NA,
+                                       PTDTRACE < 2 ~ "White",
+                                       PTDTRACE < 3 ~ "Black",
+                                       PTDTRACE < 4 ~ "American Indian/Alaskan Native",
+                                       PTDTRACE < 5 ~ "Asian",
+                                       PTDTRACE < 6 ~ "Hawaiian/Pacific Islander",
+                                       TRUE ~ "Mixed"),
+                             levels = c("White", "Black",
+                                        "American Indian/Alaskan Native",
+                                        "Asian", "Hawaiian/Pacific Islander",
+                                        "Mixed"),
+                             exclude = NULL),
+           GEREG = factor(case_when(GEREG < 2 ~ "Northeast",
+                                    GEREG < 3 ~ "Midwest",
+                                    GEREG < 4 ~ "South",
+                                    GEREG < 5 ~ "West")),
+           GEDIV = factor(case_when(GEDIV < 2 ~ "New England",
+                                    GEDIV < 3 ~ "Middle Atlantic",
+                                    GEDIV < 4 ~ "East North Central",
+                                    GEDIV < 5 ~ "West North Central",
+                                    GEDIV < 6 ~ "South Atlantic",
+                                    GEDIV < 7 ~ "East South Central",
+                                    GEDIV < 8 ~ "West South Central",
+                                    GEDIV < 9 ~ "Mountain",
+                                    TRUE ~ "Pacific")),
+           GESTFIPS = factor(case_when(GESTFIPS < 2 ~ "AL",
+                                       GESTFIPS < 3 ~ "AK",
+                                       GESTFIPS < 5 ~ "AZ",
+                                       GESTFIPS < 6 ~ "AR",
+                                       GESTFIPS < 7 ~ "CA",
+                                       GESTFIPS < 9 ~ "CO",
+                                       GESTFIPS < 10 ~ "CT",
+                                       GESTFIPS < 11 ~ "DE",
+                                       GESTFIPS < 12 ~ "DC",
+                                       GESTFIPS < 13 ~ "FL",
+                                       GESTFIPS < 14 ~ "GA",
+                                       GESTFIPS < 16 ~ "HI",
+                                       GESTFIPS < 17 ~ "ID",
+                                       GESTFIPS < 18 ~ "IL",
+                                       GESTFIPS < 19 ~ "IN",
+                                       GESTFIPS < 20 ~ "IA",
+                                       GESTFIPS < 21 ~ "KS",
+                                       GESTFIPS < 22 ~ "KY",
+                                       GESTFIPS < 23 ~ "LA",
+                                       GESTFIPS < 24 ~ "ME",
+                                       GESTFIPS < 25 ~ "MD",
+                                       GESTFIPS < 26 ~ "MA",
+                                       GESTFIPS < 27 ~ "MI",
+                                       GESTFIPS < 28 ~ "MN",
+                                       GESTFIPS < 29 ~ "MS",
+                                       GESTFIPS < 30 ~ "MO",
+                                       GESTFIPS < 37 ~ "NY",
+                                       GESTFIPS < 38 ~ "NC",
+                                       GESTFIPS < 39 ~ "ND",
+                                       GESTFIPS < 40 ~ "OH",
+                                       GESTFIPS < 41 ~ "OK",
+                                       GESTFIPS < 42 ~ "OR",
+                                       GESTFIPS < 44 ~ "PA",
+                                       GESTFIPS < 45 ~ "RI",
+                                       GESTFIPS < 46 ~ "SC",
+                                       GESTFIPS < 47 ~ "SD",
+                                       GESTFIPS < 48 ~ "TN",
+                                       GESTFIPS < 49 ~ "TX",
+                                       GESTFIPS < 50 ~ "UT",
+                                       GESTFIPS < 51 ~ "VT",
+                                       GESTFIPS < 53 ~ "VA",
+                                       GESTFIPS < 54 ~ "WA",
+                                       GESTFIPS < 55 ~ "WV",
+                                       GESTFIPS < 56 ~ "WI",
+                                       TRUE ~ "WY")))
+           
+           
+
+```
+
+```{r nutrition_data}
+my_url <- "https://raw.githubusercontent.com/geedoubledee/data608_story6/main/data/suite-of-food-security-indicators_usa.csv"
+nutrition_df <- read.csv(my_url, )
+nutrition_df <- nutrition_df[-1, ]
+colnames(nutrition_df) <- to_snake_case(colnames(nutrition_df))
+nutrition_df$year <- as.integer(nutrition_df$year)
+
+```
+
+```{r visualizations1}
+children_item_codes <- rev(c("21026", "210260", "21025", "210250", "21041",
+                         "210410", "21049", "210490"))
+nutrition_df <- nutrition_df |>
+    filter(item_code %in% children_item_codes)
+labels <- rev(c("Wasting", "Wasting", "Stunted", "Stunted", "Overweight", "Overweight",
+                "Low Birthweight", "Low Birthweight"))
+names(labels) <- children_item_codes
+nutrition_df <- nutrition_df |>
+    mutate(label = str_replace_all(item_code, pattern = labels))
+title <- "Wasting Is the Only Malnutrition Condition on Decline in the United States"
+caption <- "Source: https://data.humdata.org/dataset/faostat-food-security-indicators-for-united-states-of-america"
+fill_palette <- palette[c(2, 4, 6, 10)]
+color_palette <- palette[c(2, 4, 6, 10)]
+keep <- c("year", "label", "value")
+nutrition_ts <- nutrition_df |>
+    filter(unit == "%") |>
+    select(all_of(keep)) |>
+    as_tsibble(index = year, key = label) |>
+    fill_gaps(.full = TRUE) |>
+    fill(value, .direction = "down")
+p1 <- nutrition_ts |>
+    as_tibble() |>
+    filter(year %in% c(2000, 2022)) |>
+    mutate(value = as.numeric(value)) |>
+    ggplot(aes(x = label, y = value, group = label, color = label, fill = label)) +
+    geom_col() +
+    scale_y_continuous(limits = c(0, 8.5), breaks = seq(0.5, 8.5, 1)) +
+    scale_color_manual(values = color_palette) +
+    scale_fill_manual(values = fill_palette) +
+    facet_grid(~ year, scales = "free_x", space = "free_x", switch = "y") +
+    labs(x = "Condition", y = "Percentage Affected") +
+    theme(legend.position = "none", panel.spacing = unit(0, units = "cm"),
+          strip.placement = "outside",
+          strip.background = element_blank(),
+          strip.text = element_text(face = "bold"))
+p1
+
+```
+
+```{r visualizations2}
+model1 <- multinom(HRFS12MD ~ HEFAMINC,
+                   data = food_insecurity_df |>
+                       filter(!is.na(HEFAMINC) & !is.na(HRFS12MD)))
+model1
+income_levels <- seq(0, 150000, 1000)
+predictions <- data.frame(HEFAMINC = income_levels,
+                          predict(model1, data.frame(HEFAMINC = income_levels),
+                                  type = "probs"))
+lpred <- gather(predictions, HRFS12MD, probability, -HEFAMINC)
+color_palette <- c(greys[4], palette[c(7, 8)])
+breaks = seq(0, 150000, 50000)
+lpred_breaks = lpred[lpred$HEFAMINC %in% breaks, ]
+annotations <- data.frame(x = rep(breaks, 3),
+                          HRFS12MD = lpred_breaks$HRFS12MD,
+                          y = round(lpred_breaks$probability * 100, 1))
+p3 <- lpred |>
+    ggplot(aes(x = HEFAMINC, y = round(probability * 100, 1), group = HRFS12MD,
+               color = HRFS12MD)) +
+    geom_line() +
+    scale_x_continuous(limits = c(0, 150000), breaks = breaks) +
+    scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10)) +
+    geom_point(data = annotations, aes(x = x, y = y), size = 2) +
+    scale_color_manual(values = color_palette,
+                       guide = guide_legend(reverse = TRUE)) +
+    theme(legend.position = "bottom")
+p3 
+
+```
+
+```{r visualizations3, warning = FALSE, message = FALSE}
+keep <- c("HRPOOR")
+pivot_cols <- c("HRFS12MD", "HRFS12MC", "HRFS12M8", "HRFS30D2", "HRFS30D5",
+                "HRFS30D8")
+pivot_df <- food_insecurity_df |>
+    select(all_of(c(keep, pivot_cols))) |>
+    pivot_longer(cols = pivot_cols, names_to = "Variable",
+                 values_to = "Values") |>
+    group_by(HRPOOR, Variable, Values) |>
+    summarize(Freq = n()) |>
+    filter(!is.na(Values)) |>
+    group_by(HRPOOR, Variable) |>
+    mutate(Total = sum(Freq)) |>
+    ungroup() |>
+    mutate(Perc = round(Freq / Total * 100, 1),
+           Label = ifelse(Perc > 5, Perc, NA))
+twelvemon <- c("HRFS12MC", "HRFS12M8")
+fill_palette <- c(greys[4], palette[c(7, 8)])
+p4 <- pivot_df |>
+    filter(Variable %in% twelvemon) |>
+    ggplot(aes(x = HRPOOR, y = Perc, group = Values, color = Values, fill = Values)) +
+    geom_col(position = "stack", lwd = 1.5, color = "white") +
+    geom_text(aes(label = ifelse(!is.na(Label),
+                                 paste0(sprintf("%1.0f", Label), "%"), NA)),
+              position = position_stack(vjust = 0.5),
+              size = 5, color = "white", fontface = "bold") +
+    scale_fill_manual(values = fill_palette, guide = guide_legend(reverse = TRUE)) +
+    scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10)) +
+    theme(legend.position = "top",
+          legend.title = element_blank()) + 
+    facet_grid(vars(Variable)) +
+    coord_flip()
+p4
+
+```
+
+```{r visualizations4}
+
 
 ```
