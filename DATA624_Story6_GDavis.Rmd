@@ -16,6 +16,10 @@ library(RColorBrewer)
 library(ggpubr)
 library(nnet)
 library(fpp3)
+library(statebins)
+library(cowplot)
+library(ggflowchart)
+library(igraph)
 
 ```
 
@@ -23,6 +27,7 @@ library(fpp3)
 cur_theme <- theme_set(theme_classic())
 palette <- brewer.pal(n = 12, name = "Paired")
 greys <- brewer.pal(n = 9, name = "Greys")
+set.seed(1006)
 
 ```
 
@@ -95,7 +100,8 @@ food_insecurity_df <- food_insecurity_df |>
                                 HEFAMINC < 16 ~ 100000,
                                 TRUE ~ 150000),
            HRPOOR = factor(case_when(HRPOOR < 2 ~ "Below",
-                                     TRUE ~ "Above")),
+                                     TRUE ~ "Above"),
+                           levels = c("Above", "Below")),
            HRFS12MD = factor(case_when(HRFS12MD < 0 ~ NA,
                                        HRFS12MD < 3 ~ "High or Marginal",
                                        HRFS12MD < 4 ~ "Low",
@@ -272,8 +278,8 @@ nutrition_df <- nutrition_df |>
     mutate(label = str_replace_all(item_code, pattern = labels))
 title <- "Wasting Is the Only Malnutrition Condition on Decline in the United States"
 caption <- "Source: https://data.humdata.org/dataset/faostat-food-security-indicators-for-united-states-of-america"
-fill_palette <- palette[c(1, 3, 5, 9)]
-color_palette <- palette[c(1, 3, 5, 9)]
+fill_palette <- palette[c(1, 3, 9, 5)]
+color_palette <- palette[c(1, 3, 9, 5)]
 keep <- c("year", "label", "value")
 nutrition_ts <- nutrition_df |>
     filter(unit == "%") |>
@@ -282,6 +288,7 @@ nutrition_ts <- nutrition_df |>
     fill_gaps(.full = TRUE) |>
     fill(value, .direction = "down")
 title_str <- "Many US Children Under 5 Experience Conditions of Malnutrition, and\nMost Conditions Are Slightly More Prevalant Today than 20 Years Ago"
+cap_str <- "Source: https://data.humdata.org/dataset/faostat-food-security-indicators-for-united-states-of-america"
 nutrition_plot_df <- nutrition_ts |>
     as_tibble() |>
     filter(year %in% c(2002, 2022)) |>
@@ -297,18 +304,22 @@ p1 <- nutrition_plot_df |>
     ggplot(aes(x = label, y = value, group = label, color = label, fill = label)) +
     geom_col() +
     geom_text(aes(label = lab), vjust = -0.75,
-              size = 5, fontface = "bold") +
-    scale_y_continuous(limits = c(0, 9), breaks = seq(0, 9, 1)) +
+              size = 4, fontface = "bold") +
+    scale_y_continuous(limits = c(0, 9), breaks = seq(0, 8, 1)) +
     scale_color_manual(values = color_palette) +
     scale_fill_manual(values = fill_palette) +
     facet_grid(~ year, scales = "free_x", space = "free_x", switch = "y") +
     labs(x = "Condition", y = "Percentage Affected",
-         title = title_str) +
+         title = title_str,
+         caption = cap_str) +
     theme(legend.position = "none", panel.spacing = unit(0, units = "cm"),
           strip.placement = "outside",
           strip.background = element_blank(),
-          strip.text = element_text(face = "bold"),
-          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+          strip.text = element_text(size = 12, face = "bold"),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+          plot.caption.position = "plot",
+          plot.title.position = "plot",
+          plot.caption = element_text(hjust = 0))
 p1
 
 ```
@@ -336,7 +347,8 @@ annotations <- data.frame(x = rep(breaks, 2),
                           y = round(lpred_breaks$probability * 100, 1))
 annotations <- annotations |>
     mutate(lab = paste0(format(y, nsmall = 1), "%"))
-title_str = "The Probability of Experiencing Low or Very Low Food Security Decreases\nSignificantly as Family Income Increases"
+title_str <- "The Probability of Experiencing Low or Very Low Food Security Decreases\nSignificantly as Family Income Increases"
+cap_str <- "Source: https://www.census.gov/data/datasets/time-series/demo/cps/cps-supp_cps-repwgt/cps-food-security.html"
 first <- lpred |>
     filter(HEFAMINC == 0)
 p3 <- lpred |>
@@ -356,8 +368,10 @@ p3 <- lpred |>
                        guide = guide_legend(reverse = TRUE)) +
     labs(y = "Probability (%)",
          x = "Family Income (USD)",
-         title = title_str) + 
-    theme(legend.position = "none")
+         title = title_str,
+         caption = cap_str) + 
+    theme(legend.position = "none",
+          plot.caption = element_text(hjust = 0))
 p3 
 
 ```
@@ -382,7 +396,8 @@ twelvemon <- c("HRFS12MC", "HRFS12M8")
 var_labs <- c("Children", "Adults")
 names(var_labs) <- twelvemon
 fill_palette <- c(greys[4], palette[c(7, 8)])
-title_str <- "Adults and Children in Families Whose Income Is Below 185% Poverty\nExperience Low or Very Low Food Security at Much Higher Rates"
+title_str <- "Adults and Children in Families Whose Income Is Below 185% Poverty*\nExperience Low or Very Low Food Security at Much Higher Rates"
+cap_str <- "*This percentage multiple of the poverty guidelines, which vary by family size and state, is used by\nfederal agencies to determine eligibility for public programs such as food assistance."
 p4 <- pivot_df |>
     filter(Variable %in% twelvemon) |>
     ggplot(aes(x = HRPOOR, y = Perc, group = Values, color = Values, fill = Values)) +
@@ -394,32 +409,238 @@ p4 <- pivot_df |>
     scale_fill_manual(values = fill_palette, guide = guide_legend(reverse = TRUE)) +
     scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10)) +
     theme(legend.position = "top",
-          legend.title = element_blank()) + 
+          legend.title = element_blank(),
+          plot.caption = element_text(hjust = 0)) + 
     facet_grid(vars(Variable), labeller = labeller(Variable = var_labs)) +
     labs(y = "Percentage Affected",
          x = "185% Poverty",
-         title = title_str) + 
+         title = title_str,
+         caption = cap_str) + 
     coord_flip()
 p4
 
 ```
 
-```{r visualizations2}
+```{r visualizations2, warning = FALSE, message = FALSE}
 #by state
+keep <- c("GESTFIPS", "HRFS12MD")
+pivot_cols <- c("HRFS12MD")
+state_pivot_df <- food_insecurity_df |>
+    select(all_of(c(keep))) |>
+    pivot_longer(cols = pivot_cols, names_to = "Variable",
+                 values_to = "Values") |>
+    group_by(GESTFIPS, Variable, Values) |>
+    summarize(Freq = n()) |>
+    filter(!is.na(Values)) |>
+    group_by(GESTFIPS, Variable) |>
+    mutate(Total = sum(Freq)) |>
+    ungroup() |>
+    mutate(Perc = round(Freq / Total * 100, 1))
+state_pivot_df_low_very_low_only <- state_pivot_df |>
+    filter(Values != "High or Marginal") |>
+    group_by(GESTFIPS) |>
+    summarize(Total_Perc = sum(Perc))
+zero <- as.data.frame(state.abb) |>
+    filter(!state.abb %in% state_pivot_df_low_very_low_only$GESTFIPS)
+zero <- zero |>
+    mutate(GESTFIPS = state.abb,
+           Total_Perc = 0) |>
+    select(-state.abb)
+state_pivot_df_low_very_low_only <- state_pivot_df_low_very_low_only |>
+    bind_rows(zero) |>
+    mutate(Bin = as.factor(case_when(Total_Perc == 0 ~ 0,
+                                     Total_Perc < 5 ~ 5,
+                                     Total_Perc < 10 ~ 10,
+                                     Total_Perc < 15 ~ 15,
+                                     TRUE ~ 20)))
 
+title_str <- "States in the South Report the Highest Levels of Low or Very Low\nFood Security, but Very Few States Report <5%"
+p2 <- state_pivot_df_low_very_low_only |>
+    mutate(GESTFIPS = as.character(GESTFIPS)) |>
+    statebins(state_col = "GESTFIPS", value_col = "Bin",
+              ggplot2_scale_function = scale_fill_brewer,
+              round = TRUE,
+              palette = "Oranges") +
+    theme_statebins(legend_position = "right") +
+    labs(fill = "Percentage Affected")
+title <- ggdraw() + 
+    draw_label(title_str)
+p2 <- plot_grid(title, p2, ncol = 1, rel_heights = c(0.1, 1))
+p2
 
 ```
 
 ```{r visualizations5}
 #by gender
+keep <- c("PESEX")
+pivot_cols <- c("HRFS12MD")
+gender_pivot_df <- food_insecurity_df |>
+    select(all_of(c(keep, pivot_cols))) |>
+    pivot_longer(cols = pivot_cols, names_to = "Variable",
+                 values_to = "Values") |>
+    group_by(PESEX, Variable, Values) |>
+    summarize(Freq = n()) |>
+    filter(!is.na(Values)) |>
+    group_by(PESEX, Variable) |>
+    mutate(Total = sum(Freq)) |>
+    ungroup() |>
+    mutate(Perc = round(Freq / Total * 100, 1)) |>
+    filter(Values != "High or Marginal")
+color_palette <- palette[c(7, 8)]
+fill_palette <- palette[c(7, 8)]
+title_str <- "Female Respondents Report Their Families Experience Low or Very Low\nFood Security at Slightly Higher Rates than Male Respondents"
+cap_str <- "Source: https://www.census.gov/data/datasets/time-series/demo/cps/cps-supp_cps-repwgt/cps-food-security.html"
+p5 <- gender_pivot_df |>
+    ggplot(aes(x = Values, y = Perc, group = Values, color = Values, fill = Values)) +
+    geom_col() +
+    geom_text(aes(label = paste0(format(Perc, nsmall = 1), "%")), vjust = -0.75,
+              size = 4, fontface = "bold") +
+    facet_grid(~ PESEX, scales = "free_x", space = "free_x", switch = "y") +
+    scale_color_manual(values = color_palette) +
+    scale_fill_manual(values = fill_palette) +
+    scale_y_continuous(limits = c(0, 10), breaks = seq(0, 10, 1)) +
+    theme(legend.position = "none", panel.spacing = unit(0, units = "cm"),
+          strip.placement = "outside",
+          strip.background = element_blank(),
+          strip.text = element_text(size = 12, face = "bold"),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+          plot.caption.position = "plot",
+          plot.title.position = "plot",
+          plot.caption = element_text(hjust = 0)) +
+    labs(y = "Percentage Affected",
+         x = "Food Security",
+         title = title_str,
+         caption = cap_str)
+p5
 
 ```
 
 ```{r visualizations6}
-#into adulthood
+#childhood benefits and adulthood food security link
+categories <- c("Neither SNAP nor WIC", "WIC Alone", "SNAP Alone",
+                "Both SNAP and WIC")
+outcome1 <- as.data.frame(c(rep("More Secure", 12), rep("Less Secure/No Change", 88)))
+elements <- sample(nrow(outcome1))
+outcome1 <- outcome1[elements, ]
+outcome2 <- as.data.frame(c(rep("More Secure", 20), rep("Less Secure/No Change", 80)))
+elements <- sample(nrow(outcome2))
+outcome2 <- outcome2[elements, ]
+outcome3 <- as.data.frame(c(rep("More Secure", 29), rep("Less Secure/No Change", 71)))
+elements <- sample(nrow(outcome3))
+outcome3 <- outcome3[elements, ]
+outcome4 <- as.data.frame(c(rep("More Secure", 34), rep("Less Secure/No Change", 66)))
+elements <- sample(nrow(outcome4))
+outcome4 <- outcome4[elements, ]
+outcomes <- outcome1 |>
+    bind_cols(outcome2, outcome3, outcome4,
+              expand.grid(seq_len(10), seq_len(10)))
+colnames(outcomes) <- c(categories, "x", "y")
+outcomes_pivot <- outcomes |>
+    pivot_longer(cols = categories, names_to = "Category", values_to = "Outcome") |>
+    mutate(Category = factor(Category, levels = categories),
+           Outcome = as.factor(Outcome))
+fill_palette <- palette[1:2]
+title_str <- "Childhood Participation in SNAP and WIC Programs Improves Probability of\nBeing More Food Secure in Adulthood"
+cap_str <- "SNAP stands for the Supplemental Nutrition Assistance Program\nWIC stands for the Special Supplemental Nutrition Program for Women, Infants, and Children\nSource: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9480484/"
+p6 <- outcomes_pivot |>
+    ggplot() +
+    geom_tile(aes(x = x, y = y,
+                  fill = Outcome), col = "white", size = 0.6) +
+    facet_wrap(~ Category, nrow = 1) +
+    scale_y_continuous(expand = c(0, 0)) +
+    scale_x_continuous(expand = c(0, 0)) +
+    coord_fixed() +
+    labs(title = title_str,
+         caption = cap_str) +
+    scale_fill_manual(values = fill_palette) +
+    theme(legend.position = "bottom",
+          legend.title = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.line = element_blank(),
+          plot.caption = element_text(hjust = 0))
+p6
+
 
 ```
 
-```{r save_highres_png_files}
+```{r visualizations7}
+#by age
+model2 <- multinom(HRFS12MD ~ PRTAGE,
+                   data = food_insecurity_df |>
+                       filter(PRTAGE >= 0 & !is.na(HRFS12MD)))
+model2
+age_levels <- seq(0, 85, 1)
+predictions2 <- data.frame(PRTAGE = age_levels,
+                          predict(model2, data.frame(PRTAGE = age_levels),
+                                  type = "probs"))
+lpred2 <- gather(predictions2, HRFS12MD, probability, -PRTAGE)
+levs <- c("High or Marginal", "Very Low")
+names(levs) <- c("High.or.Marginal", "Very.Low")
+lpred2 <- lpred2 |>
+    mutate(HRFS12MD = str_replace_all(HRFS12MD, pattern = levs)) |>
+    filter(HRFS12MD != "High or Marginal")
+color_palette <- palette[7:8]
+breaks2 = seq(25, 75, 10)
+lpred2_breaks = lpred2[lpred2$PRTAGE %in% breaks2, ]
+annotations2 <- data.frame(x = rep(breaks2, 2),
+                          HRFS12MD = lpred2_breaks$HRFS12MD,
+                          y = round(lpred2_breaks$probability * 100, 1))
+annotations2 <- annotations2 |>
+    mutate(lab = paste0(format(y, nsmall = 1), "%"))
+title_str <- "Probability of Experiencing Low or Very Low Levels of Food Security\nDecreases as Age of Respondent Increases"
+cap_str <- "Source: https://www.census.gov/data/datasets/time-series/demo/cps/cps-supp_cps-repwgt/cps-food-security.html"
+first2 <- lpred2 |>
+    filter(PRTAGE == 25)
+p7 <- lpred2 |>
+    filter(PRTAGE >= 25) |>
+    ggplot(aes(x = PRTAGE, y = round(probability * 100, 1), group = HRFS12MD,
+               color = HRFS12MD)) +
+    geom_line() +
+    geom_text(data = first2, aes(x = PRTAGE - 7, y = round(probability * 100, 1),
+                               label = HRFS12MD, color = HRFS12MD)) + 
+    scale_x_continuous(limits = c(15, 85), breaks = seq(25, 85, 5)) +
+    scale_y_continuous(limits = c(0, 15), breaks = seq(0, 15, 5),
+                       position = "right") +
+    geom_label(data = annotations2, aes(x = x, y = y, label = lab, fill = HRFS12MD),
+                                       color = "white", fontface = "bold") +
+    scale_color_manual(values = color_palette,
+                       guide = guide_legend(reverse = TRUE)) +
+    scale_fill_manual(values = color_palette,
+                       guide = guide_legend(reverse = TRUE)) +
+    labs(y = "Probability (%)",
+         x = "Age",
+         title = title_str,
+         caption = cap_str) + 
+    theme(legend.position = "none",
+          plot.caption = element_text(hjust = 0))
+p7 
 
 ```
+
+```{r visualizations8}
+#malnutrition longterm effects
+title_str <- "Malnutrition Conditions in Childhood Can Lead to Low Ability to Work\nand Low Quality of Life in the Longterm"
+cap_str <- "Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3137999/"
+flow_data <- tibble(
+    from  = c("Poverty/Disease", "Inadequate Food\nConsumption",
+              "Poor Diet/\nPhysical Inactivity", "Underweight/Stunting",
+              "Short Stature/Obesity/\nHypertension/Diabetes",
+              "Increased Fat Gain"),
+    to = c("Underweight/Stunting", "Underweight/Stunting",
+           "Increased Fat Gain",
+           "Short Stature/Obesity/\nHypertension/Diabetes",
+           "Low Ability to Work/\nLow Quality of Life",
+           "Short Stature/Obesity/\nHypertension/Diabetes")
+)
+p8 <- ggflowchart(data = flow_data, text_size = 3.2, fill = "#FB9A99",
+                  color = "#E31A1C", text_color = "black",
+                  arrow_color = "#E31A1C") +
+    labs(title = title_str,
+         caption = cap_str) +
+    theme(plot.caption = element_text(hjust = 0))
+p8
+
+```
+
